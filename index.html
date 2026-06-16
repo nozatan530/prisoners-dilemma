@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>囚人のジレンマ シミュレーター</title>
+<meta name="description" content="協力と裏切りのジレンマを、繰り返し対戦しながら体験する教育用インタラクティブ教材。">
+
+<!-- OGP -->
+<meta property="og:title" content="囚人のジレンマ シミュレーター">
+<meta property="og:description" content="協力と裏切りのジレンマを体験するインタラクティブ教材">
+<meta property="og:image" content="https://dilemma.meetupsensei.com/ogp.jpg">
+<meta property="og:url" content="https://dilemma.meetupsensei.com/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+
+<style>
+  :root {
+    --bg: #f4f4f1;
+    --surface: #ffffff;
+    --surface-2: #eceae5;
+    --border: #dddbd4;
+    --text: #232321;
+    --text-muted: #5e5d58;
+    --accent: #346485;        /* 落ち着いた青 = 主操作 */
+    --accent-soft: #e1eaf0;
+    --on-accent: #ffffff;     /* accent 背景の上に乗る文字色 */
+    --coop: #246b58;          /* 協力 = 落ち着いた緑 */
+    --coop-soft: #ddeae5;
+    --betray: #a84e32;        /* 裏切り = 落ち着いた朱 */
+    --betray-soft: #f1ddd4;
+    --you: #346485;           /* グラフ: あなた */
+    --opp: #a9772b;           /* グラフ: 相手 */
+    --shadow: none;
+    --radius: 10px;
+  }
+  html[data-theme="dark"] {
+    --bg: #15171a;
+    --surface: #1f2226;
+    --surface-2: #2b2f34;
+    --border: #424850;
+    --text: #f1f2f3;          /* 高コントラストの明るい文字 */
+    --text-muted: #b6bbc1;    /* 暗背景でも十分読める明るさ */
+    --accent: #6fb2d6;
+    --accent-soft: #2c3b46;
+    --on-accent: #10242e;     /* 明るい青ボタンには濃色文字 */
+    --coop: #5fc4a6;
+    --coop-soft: #21372f;
+    --betray: #e6987a;
+    --betray-soft: #3a281f;
+    --you: #6fb2d6;
+    --opp: #e2b765;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP", Meiryo, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    transition: background .2s, color .2s;
+  }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 20px 18px 56px; }
+
+  /* ---- Header ---- */
+  header.top {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 22px;
+  }
+  .title-block h1 { font-size: 1.5rem; margin: 0 0 4px; letter-spacing: .01em; }
+  .title-block p { margin: 0; color: var(--text-muted); font-size: .92rem; }
+  .top-controls { display: flex; gap: 8px; flex-shrink: 0; }
+
+  /* ---- Shared control styling (統一スタイル) ---- */
+  .ctrl {
+    appearance: none; -webkit-appearance: none;
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 8px 14px; font-size: .9rem; font-family: inherit;
+    cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+    line-height: 1.3;
+  }
+  .ctrl:hover { border-color: var(--accent); }
+  .ctrl:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ctrl.active { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+
+  /* ---- Card / sections ---- */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 18px;
+  }
+  .card h2 { font-size: 1.05rem; margin: 0 0 14px; }
+  .card h3 { font-size: .92rem; margin: 0 0 10px; color: var(--text-muted); font-weight: 600; }
+
+  /* ---- Opponent grid ---- */
+  .opp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .opp-card {
+    text-align: left; padding: 14px; border-radius: var(--radius);
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s;
+  }
+  .opp-card:hover { border-color: var(--accent); }
+  .opp-card.active { border-color: var(--accent); background: var(--accent-soft); }
+  .opp-card .name { font-weight: 600; font-size: .98rem; margin-bottom: 4px; }
+  .opp-card .desc { font-size: .82rem; color: var(--text-muted); line-height: 1.45; }
+
+  /* 区切り + 人間対戦ボタン */
+  .opp-divider {
+    display: flex; align-items: center; gap: 12px;
+    color: var(--text-muted); font-size: .8rem; margin: 16px 0 12px;
+  }
+  .opp-divider::before, .opp-divider::after {
+    content: ""; flex: 1; height: 1px; background: var(--border);
+  }
+  .opp-card.human-card { width: 100%; text-align: center; }
+  .opp-card.human-card .desc { margin-top: 4px; }
+
+  /* ---- Rounds ---- */
+  .rounds-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* ---- Payoff matrix ---- */
+  .payoff { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  .payoff th, .payoff td {
+    border: 1px solid var(--border); padding: 10px 8px; text-align: center;
+  }
+  .payoff th { background: var(--surface-2); color: var(--text-muted); font-weight: 600; }
+  .payoff .cell { font-weight: 600; }
+  .payoff .you-pt { color: var(--you); }
+  .payoff .opp-pt { color: var(--opp); }
+  .payoff-note { font-size: .8rem; color: var(--text-muted); margin-top: 8px; }
+
+  .start-btn {
+    width: 100%; margin-top: 4px; padding: 13px; font-size: 1rem; font-weight: 600;
+    background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent);
+    border-radius: var(--radius); cursor: pointer; transition: opacity .15s;
+  }
+  .start-btn:hover { opacity: .9; }
+  .start-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---- Play area ---- */
+  .scoreboard {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    gap: 8px; text-align: center; margin-bottom: 6px;
+  }
+  .score-side .who { font-size: .85rem; color: var(--text-muted); }
+  .score-side .num { font-size: 2.1rem; font-weight: 700; line-height: 1.1; }
+  .score-side.you .num { color: var(--you); }
+  .score-side.opp .num { color: var(--opp); }
+  .vs-sep { color: var(--text-muted); font-size: .9rem; }
+
+  .round-status {
+    text-align: center; margin: 14px 0 16px; color: var(--text-muted); font-size: .92rem;
+  }
+  .round-status strong { color: var(--text); }
+
+  .choice-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .choice-btn {
+    padding: 22px 12px; border-radius: var(--radius); cursor: pointer;
+    border: 1.5px solid var(--border); background: var(--surface);
+    font-size: 1.15rem; font-weight: 700; font-family: inherit; color: var(--text);
+    transition: background .15s, border-color .15s;
+  }
+  .choice-btn .sub { display: block; font-size: .76rem; font-weight: 500; color: var(--text-muted); margin-top: 4px; }
+  .choice-btn.coop:hover { border-color: var(--coop); background: var(--coop-soft); }
+  .choice-btn.betray:hover { border-color: var(--betray); background: var(--betray-soft); }
+  .choice-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .pass-screen { text-align: center; padding: 18px 4px; }
+  .pass-screen .big { font-size: 1.15rem; font-weight: 600; margin-bottom: 6px; }
+  .pass-screen .small { color: var(--text-muted); font-size: .88rem; margin-bottom: 16px; }
+
+  /* ---- Reveal ---- */
+  .reveal { text-align: center; }
+  .reveal-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 6px 0 14px; }
+  .reveal-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .reveal-box .who { font-size: .82rem; color: var(--text-muted); margin-bottom: 6px; }
+  .reveal-box .move { font-size: 1.15rem; font-weight: 700; margin-bottom: 4px; }
+  .reveal-box.coop .move { color: var(--coop); }
+  .reveal-box.betray .move { color: var(--betray); }
+  .reveal-box .gain { font-size: .9rem; color: var(--text-muted); }
+  .next-btn {
+    margin-top: 4px; padding: 11px 26px; font-size: .95rem; font-weight: 600;
+    background: var(--accent); color: var(--on-accent); border: none; border-radius: var(--radius); cursor: pointer;
+  }
+  .next-btn:hover { opacity: .9; }
+  .next-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---- Table ---- */
+  .htable-wrap { overflow-x: auto; }
+  table.hist { border-collapse: collapse; width: 100%; font-size: .85rem; }
+  table.hist th, table.hist td { border: 1px solid var(--border); padding: 7px 6px; text-align: center; white-space: nowrap; }
+  table.hist th { background: var(--surface-2); color: var(--text-muted); font-weight: 600; }
+  table.hist td.c { color: var(--coop); font-weight: 600; }
+  table.hist td.d { color: var(--betray); font-weight: 600; }
+  table.hist tr.total td { font-weight: 700; background: var(--surface-2); }
+  table.hist td.pt-you { color: var(--you); }
+  table.hist td.pt-opp { color: var(--opp); }
+
+  /* ---- Chart ---- */
+  .chart-legend { display: flex; gap: 16px; justify-content: center; font-size: .82rem; margin-top: 8px; color: var(--text-muted); }
+  .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+  canvas { width: 100%; height: auto; display: block; }
+
+  /* ---- Memo ---- */
+  textarea.memo {
+    width: 100%; min-height: 84px; resize: vertical; font-family: inherit; font-size: .9rem;
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px; line-height: 1.5;
+  }
+  textarea.memo:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* ---- Finished ---- */
+  .result-banner { text-align: center; padding: 8px 0 4px; }
+  .result-banner .verdict { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; }
+  .result-banner .fscore { color: var(--text-muted); font-size: .95rem; }
+  .result-banner .fscore .you-pt { color: var(--you); font-weight: 600; }
+  .result-banner .fscore .opp-pt { color: var(--opp); font-weight: 600; }
+  .opp-reveal { font-size: .86rem; color: var(--text-muted); text-align: center; margin-top: 10px; }
+
+  .reflect-list { margin: 0; padding-left: 0; list-style: none; }
+  .reflect-list li {
+    border-left: 3px solid var(--accent); padding: 6px 0 6px 12px; margin-bottom: 12px;
+    font-size: .92rem;
+  }
+  .end-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+  .end-actions .ctrl { flex: 1; text-align: center; padding: 12px; }
+
+  /* ---- Footer ---- */
+  footer.foot {
+    text-align: center; color: var(--text-muted); font-size: .82rem;
+    margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--border);
+  }
+  footer.foot a { color: var(--accent); text-decoration: none; }
+  footer.foot a:hover { text-decoration: underline; }
+
+  .hidden { display: none !important; }
+
+  @media (max-width: 560px) {
+    .opp-grid { grid-template-columns: 1fr; }
+    .title-block h1 { font-size: 1.3rem; }
+    .score-side .num { font-size: 1.7rem; }
+    .choice-btn { padding: 18px 8px; font-size: 1.05rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="title-block">
+      <h1 data-i18n="title">囚人のジレンマ シミュレーター</h1>
+      <p data-i18n="subtitle">協力と裏切り ― あなたならどうする？</p>
+    </div>
+    <div class="top-controls">
+      <button id="langBtn" class="ctrl" type="button">EN</button>
+      <button id="themeBtn" class="ctrl" type="button" aria-label="テーマ切替">🌙</button>
+    </div>
+  </header>
+
+  <!-- ============ SETUP ============ -->
+  <section id="setupScreen">
+    <div class="card">
+      <h2 data-i18n="setup_opponent">対戦相手を選ぶ</h2>
+      <div class="opp-grid" id="oppGrid"></div>
+      <div class="opp-divider" data-i18n="opp_or">または</div>
+      <div id="humanWrap"></div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="setup_rounds">ラウンド数</h2>
+      <div class="rounds-row" id="roundsRow"></div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="setup_payoff">得点ルール</h2>
+      <table class="payoff" id="payoffTable"></table>
+      <p class="payoff-note" data-i18n="payoff_note">表の数字は、そのラウンドで自分が得る点数です。</p>
+    </div>
+
+    <button class="start-btn" id="startBtn" type="button" data-i18n="start">ゲーム開始</button>
+  </section>
+
+  <!-- ============ PLAY ============ -->
+  <section id="playScreen" class="hidden">
+    <div class="card">
+      <div class="scoreboard">
+        <div class="score-side you">
+          <div class="who" data-i18n="you">あなた</div>
+          <div class="num" id="scoreYou">0</div>
+        </div>
+        <div class="vs-sep" data-i18n="vs">対</div>
+        <div class="score-side opp">
+          <div class="who" id="oppLabel">相手</div>
+          <div class="num" id="scoreOpp">0</div>
+        </div>
+      </div>
+      <div class="round-status" id="roundStatus"></div>
+
+      <!-- choice / pass / reveal がここに描画される -->
+      <div id="playBody"></div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="chart_title">累積スコアの推移</h2>
+      <canvas id="chart" width="880" height="300"></canvas>
+      <div class="chart-legend">
+        <span><i class="swatch" style="background:var(--you)"></i><span data-i18n="you">あなた</span></span>
+        <span><i class="swatch" style="background:var(--opp)"></i><span id="legendOpp">相手</span></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="record">対戦記録</h2>
+      <div class="htable-wrap">
+        <table class="hist" id="histTable"></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="memo_title">戦略メモ</h2>
+      <textarea class="memo" id="memo" data-i18n-ph="memo_placeholder" placeholder="次にどう動く？ なぜそう考えた？"></textarea>
+    </div>
+  </section>
+
+  <!-- ============ FINISHED ============ -->
+  <section id="endScreen" class="hidden">
+    <div class="card">
+      <div class="result-banner">
+        <div class="verdict" id="verdict"></div>
+        <div class="fscore" id="finalScore"></div>
+      </div>
+      <div class="opp-reveal" id="oppReveal"></div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="chart_title">累積スコアの推移</h2>
+      <canvas id="chartEnd" width="880" height="300"></canvas>
+      <div class="chart-legend">
+        <span><i class="swatch" style="background:var(--you)"></i><span data-i18n="you">あなた</span></span>
+        <span><i class="swatch" style="background:var(--opp)"></i><span id="legendOppEnd">相手</span></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="record">対戦記録</h2>
+      <div class="htable-wrap">
+        <table class="hist" id="histTableEnd"></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="reflection_title">考察してみよう</h2>
+      <ul class="reflect-list" id="reflectList"></ul>
+    </div>
+
+    <div class="end-actions">
+      <button class="ctrl" id="againBtn" type="button" data-i18n="play_again">もう一度プレイ</button>
+      <button class="ctrl" id="backBtn" type="button" data-i18n="back_setup">設定に戻る</button>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span data-i18n="footer_lead">制作：のざたん ／ </span><a href="https://meetupsensei.com" target="_blank" rel="noopener">meetupsensei.com</a>
+  </footer>
+
+</div>
+
+<script>
+/* ============================================================
+   i18n
+============================================================ */
+const I18N = {
+  ja: {
+    title: "囚人のジレンマ シミュレーター",
+    subtitle: "協力と裏切り ― あなたならどうする？",
+    setup_opponent: "対戦相手を選ぶ",
+    setup_rounds: "ラウンド数",
+    setup_payoff: "得点ルール",
+    payoff_note: "表の数字は、そのラウンドで自分が得る点数です。",
+    start: "ゲーム開始",
+    chart_title: "累積スコアの推移",
+    record: "対戦記録",
+    memo_title: "戦略メモ",
+    memo_placeholder: "次にどう動く？ なぜそう考えた？",
+    reflection_title: "考察してみよう",
+    play_again: "もう一度プレイ",
+    back_setup: "設定に戻る",
+    footer_lead: "制作：のざたん ／ ",
+    you: "あなた",
+    opponent: "相手",
+    vs: "対",
+    cooperate: "協力",
+    betray: "裏切り",
+    coop_sub: "おたがいの利益を選ぶ",
+    betray_sub: "自分の利益を優先する",
+    // opponents
+    opp_random_name: "ランダム",
+    opp_random_desc: "戦略なし。コインを投げるように選びます。",
+    opp_tft_name: "しっぺ返し",
+    opp_tft_desc: "最初は協力。その後は「あなたの前回の手」をまねます。",
+    opp_allc_name: "お人好し",
+    opp_allc_desc: "何があってもずっと協力し続けます。",
+    opp_alld_name: "裏切り者",
+    opp_alld_desc: "常に裏切ります。",
+    opp_grudge_name: "執念深い",
+    opp_grudge_desc: "一度でも裏切られたら、以後ずっと裏切ります。",
+    opp_mystery_name: "正体不明",
+    opp_mystery_desc: "上の5つの戦略のどれかをランダムに採用。正体は最後に明かされます。",
+    opp_or: "または",
+    opp_human_name: "人間どうし",
+    opp_human_desc: "端末を渡し合って2人で対戦します。",
+    // payoff
+    pay_corner: "あなた ＼ 相手",
+    // play
+    round_of: (n, t) => `ラウンド ${n} / ${t}`,
+    your_turn: "手を選んでください",
+    a_turn: "プレイヤーA の番",
+    b_turn: "プレイヤーB の番",
+    b_hidden: "（Aの選択は隠れています）",
+    pass_to_b: "端末をプレイヤーB に渡してください",
+    pass_small: "Aの選択は秘密のままです",
+    ready: "準備OK",
+    this_round: "このラウンドの結果",
+    gained: (n) => `+${n} 点`,
+    next: "次のラウンドへ",
+    see_final: "結果を見る",
+    // table
+    t_round: "回",
+    t_you: "あなた",
+    t_opp: "相手",
+    t_pty: "得点(あなた)",
+    t_pto: "得点(相手)",
+    t_total: "合計",
+    // end
+    you_win: "あなたの勝ち",
+    opp_win: "相手の勝ち",
+    draw: "引き分け",
+    final_lead: "最終スコア　",
+    opp_was: (name, desc) => `相手の戦略は「${name}」でした ― ${desc}`,
+    mystery_was: (name, desc) => `相手の正体は「${name}」でした ― ${desc}`,
+    reflect: [
+      "「協力し続けた方がトータル得点は高くなる」のに、なぜ「裏切りたくなる」のだろう？",
+      "最初の1回で裏切られたら、信頼を回復するにはどうすればいい？",
+      "相手の戦略が分かっているとき、あなたの最適な手は変わる？",
+      "現実の社会（環境問題・ビジネス・国際関係）で、これと同じ構造はどこにある？"
+    ]
+  },
+  en: {
+    title: "Prisoner's Dilemma Simulator",
+    subtitle: "Cooperate or betray — what would you do?",
+    setup_opponent: "Choose your opponent",
+    setup_rounds: "Number of rounds",
+    setup_payoff: "Scoring rules",
+    payoff_note: "Each number is the points YOU earn in that round.",
+    start: "Start game",
+    chart_title: "Cumulative score",
+    record: "Match record",
+    memo_title: "Strategy notes",
+    memo_placeholder: "What will you do next? Why?",
+    reflection_title: "Let's reflect",
+    play_again: "Play again",
+    back_setup: "Back to setup",
+    footer_lead: "Created by Nozatan ／ ",
+    you: "You",
+    opponent: "Opponent",
+    vs: "vs",
+    cooperate: "Cooperate",
+    betray: "Betray",
+    coop_sub: "Choose the shared benefit",
+    betray_sub: "Put yourself first",
+    opp_random_name: "Random",
+    opp_random_desc: "No strategy. Chooses like a coin flip.",
+    opp_tft_name: "Tit-for-Tat",
+    opp_tft_desc: "Cooperates first, then copies your last move.",
+    opp_allc_name: "Always Cooperate",
+    opp_allc_desc: "Always cooperates, no matter what.",
+    opp_alld_name: "Always Betray",
+    opp_alld_desc: "Always betrays.",
+    opp_grudge_name: "Grudger",
+    opp_grudge_desc: "Cooperates until betrayed once, then always betrays.",
+    opp_mystery_name: "Mystery",
+    opp_mystery_desc: "Secretly uses one of the five strategies above. Revealed at the end.",
+    opp_or: "or",
+    opp_human_name: "Human vs Human",
+    opp_human_desc: "Pass the device back and forth between two players.",
+    pay_corner: "You ＼ Opp",
+    round_of: (n, t) => `Round ${n} / ${t}`,
+    your_turn: "Make your choice",
+    a_turn: "Player A's turn",
+    b_turn: "Player B's turn",
+    b_hidden: "(A's choice is hidden)",
+    pass_to_b: "Pass the device to Player B",
+    pass_small: "A's choice stays secret",
+    ready: "Ready",
+    this_round: "This round",
+    gained: (n) => `+${n} pts`,
+    next: "Next round",
+    see_final: "See result",
+    t_round: "#",
+    t_you: "You",
+    t_opp: "Opp",
+    t_pty: "Pts (You)",
+    t_pto: "Pts (Opp)",
+    t_total: "Total",
+    you_win: "You win",
+    opp_win: "Opponent wins",
+    draw: "Draw",
+    final_lead: "Final score　",
+    opp_was: (name, desc) => `The opponent's strategy was "${name}" — ${desc}`,
+    mystery_was: (name, desc) => `The opponent was "${name}" — ${desc}`,
+    reflect: [
+      "Cooperating throughout earns more in total — so why is betrayal so tempting?",
+      "If you're betrayed on the very first round, how can trust be rebuilt?",
+      "Once you know the opponent's strategy, does your best move change?",
+      "Where does this same structure appear in the real world (climate, business, international relations)?"
+    ]
+  }
+};
+
+/* ============================================================
+   Payoff:  [my][opp] => my points.  C=協力, D=裏切り
+============================================================ */
+const PAY = { CC: 3, CD: 0, DC: 5, DD: 1 };
+
+/* 戦略を持つ相手（6種）。mystery は開始時に下の5種から1つを秘密裏に採用 */
+const STRAT_OPPS = [
+  { id: "random",  nameKey: "opp_random_name",  descKey: "opp_random_desc" },
+  { id: "tft",     nameKey: "opp_tft_name",     descKey: "opp_tft_desc" },
+  { id: "allc",    nameKey: "opp_allc_name",    descKey: "opp_allc_desc" },
+  { id: "alld",    nameKey: "opp_alld_name",    descKey: "opp_alld_desc" },
+  { id: "grudge",  nameKey: "opp_grudge_name",  descKey: "opp_grudge_desc" },
+  { id: "mystery", nameKey: "opp_mystery_name", descKey: "opp_mystery_desc" }
+];
+const HUMAN_OPP = { id: "human", nameKey: "opp_human_name", descKey: "opp_human_desc" };
+const ALL_OPPS = [...STRAT_OPPS, HUMAN_OPP];
+
+/* mystery が選ぶ候補（具体的な5戦略） */
+const MYSTERY_POOL = ["random", "tft", "allc", "alld", "grudge"];
+
+/* ============================================================
+   State
+============================================================ */
+let lang = "ja";
+let theme = "light";
+const state = {
+  opp: "tft",
+  actualStrategy: "tft",  // mystery のとき実際に使う戦略
+  totalRounds: 10,
+  round: 1,
+  scoreYou: 0,
+  scoreOpp: 0,
+  history: [],          // {you:'C'|'D', opp:'C'|'D', gy, go}
+  phase: "choose",      // choose | passToB | bturn | reveal
+  pendingYou: null,     // human: A の選択
+  lastReveal: null      // {you, opp, gy, go}
+};
+
+const t = (k) => I18N[lang][k];
+
+/* ============================================================
+   DOM refs
+============================================================ */
+const $ = (id) => document.getElementById(id);
+const setupScreen = $("setupScreen");
+const playScreen = $("playScreen");
+const endScreen = $("endScreen");
+
+/* ============================================================
+   Language & theme
+============================================================ */
+function applyStaticI18n() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    el.textContent = t(el.getAttribute("data-i18n"));
+  });
+  document.querySelectorAll("[data-i18n-ph]").forEach(el => {
+    el.setAttribute("placeholder", t(el.getAttribute("data-i18n-ph")));
+  });
+  $("langBtn").textContent = lang === "ja" ? "EN" : "日本語";
+}
+
+function oppName(id){ const o = ALL_OPPS.find(x=>x.id===id); return o ? t(o.nameKey) : ""; }
+function oppDesc(id){ const o = ALL_OPPS.find(x=>x.id===id); return o ? t(o.descKey) : ""; }
+
+/* プレイ中に表示する相手ラベル。mystery は正体を隠す（reveal=true で開示） */
+function oppDisplayLabel(reveal){
+  if (state.opp === "human") return "B";
+  if (state.opp === "mystery") return reveal ? oppName(state.actualStrategy) : "？";
+  return oppName(state.opp);
+}
+
+function setLang(l) {
+  lang = l;
+  applyStaticI18n();
+  buildOpponents();
+  buildPayoff();
+  // re-render whatever screen is visible
+  if (!playScreen.classList.contains("hidden")) renderPlay();
+  if (!endScreen.classList.contains("hidden")) renderEnd();
+  // labels that aren't static
+  $("oppLabel").textContent = oppDisplayLabel(false);
+  $("legendOpp").textContent = oppDisplayLabel(false);
+}
+
+function setTheme(th) {
+  theme = th;
+  document.documentElement.setAttribute("data-theme", th);
+  $("themeBtn").textContent = th === "dark" ? "☀️" : "🌙";
+  // redraw charts (colors come from CSS vars)
+  if (!playScreen.classList.contains("hidden")) drawChart("chart");
+  if (!endScreen.classList.contains("hidden")) drawChart("chartEnd");
+}
+
+/* ============================================================
+   Build setup UI
+============================================================ */
+function buildOpponents() {
+  const grid = $("oppGrid");
+  const humanWrap = $("humanWrap");
+  grid.innerHTML = "";
+  humanWrap.innerHTML = "";
+
+  const clearActive = () => {
+    grid.querySelectorAll(".opp-card").forEach(c => c.classList.remove("active"));
+    humanWrap.querySelectorAll(".opp-card").forEach(c => c.classList.remove("active"));
+  };
+
+  STRAT_OPPS.forEach(o => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "opp-card" + (o.id === state.opp ? " active" : "");
+    b.innerHTML = `<div class="name">${t(o.nameKey)}</div><div class="desc">${t(o.descKey)}</div>`;
+    b.addEventListener("click", () => {
+      state.opp = o.id;
+      clearActive();
+      b.classList.add("active");
+    });
+    grid.appendChild(b);
+  });
+
+  // 人間どうし（フル幅ボタン）
+  const h = document.createElement("button");
+  h.type = "button";
+  h.className = "opp-card human-card" + (state.opp === "human" ? " active" : "");
+  h.innerHTML = `<div class="name">${t(HUMAN_OPP.nameKey)}</div><div class="desc">${t(HUMAN_OPP.descKey)}</div>`;
+  h.addEventListener("click", () => {
+    state.opp = "human";
+    clearActive();
+    h.classList.add("active");
+  });
+  humanWrap.appendChild(h);
+}
+
+function buildRounds() {
+  const row = $("roundsRow");
+  row.innerHTML = "";
+  [5, 10, 15, 20].forEach(n => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ctrl" + (n === state.totalRounds ? " active" : "");
+    b.textContent = n;
+    b.addEventListener("click", () => {
+      state.totalRounds = n;
+      row.querySelectorAll(".ctrl").forEach(c => c.classList.remove("active"));
+      b.classList.add("active");
+    });
+    row.appendChild(b);
+  });
+}
+
+function buildPayoff() {
+  const tbl = $("payoffTable");
+  const C = t("cooperate"), D = t("betray");
+  const cell = (you, opp) =>
+    `<span class="cell"><span class="you-pt">${PAY[you+opp]}</span> / <span class="opp-pt">${PAY[opp+you]}</span></span>`;
+  tbl.innerHTML = `
+    <tr>
+      <th>${t("pay_corner")}</th>
+      <th>${C}</th>
+      <th>${D}</th>
+    </tr>
+    <tr>
+      <th>${C}</th>
+      <td>${cell("C","C")}</td>
+      <td>${cell("C","D")}</td>
+    </tr>
+    <tr>
+      <th>${D}</th>
+      <td>${cell("D","C")}</td>
+      <td>${cell("D","D")}</td>
+    </tr>`;
+}
+
+/* ============================================================
+   Bot logic — B の手を、Aの現在の手を見ずに決める
+============================================================ */
+function botMove() {
+  const h = state.history;
+  switch (state.actualStrategy) {
+    case "random": return Math.random() < 0.5 ? "C" : "D";
+    case "tft":    return h.length === 0 ? "C" : h[h.length - 1].you;
+    case "allc":   return "C";
+    case "alld":   return "D";
+    case "grudge": return h.some(r => r.you === "D") ? "D" : "C";
+    default:       return "C";
+  }
+}
+
+/* ============================================================
+   Game flow
+============================================================ */
+function startGame() {
+  state.round = 1;
+  state.scoreYou = 0;
+  state.scoreOpp = 0;
+  state.history = [];
+  state.phase = "choose";
+  state.pendingYou = null;
+  state.lastReveal = null;
+  $("memo").value = "";
+
+  // mystery: この対戦で使う戦略を秘密裏に1つ選ぶ
+  if (state.opp === "mystery") {
+    state.actualStrategy = MYSTERY_POOL[Math.floor(Math.random() * MYSTERY_POOL.length)];
+  } else {
+    state.actualStrategy = state.opp;
+  }
+
+  $("oppLabel").textContent = oppDisplayLabel(false);
+  $("legendOpp").textContent = oppDisplayLabel(false);
+
+  setupScreen.classList.add("hidden");
+  endScreen.classList.add("hidden");
+  playScreen.classList.remove("hidden");
+  window.scrollTo(0, 0);
+  renderPlay();
+}
+
+function resolveRound(youMove, oppMove) {
+  const gy = PAY[youMove + oppMove];
+  const go = PAY[oppMove + youMove];
+  state.scoreYou += gy;
+  state.scoreOpp += go;
+  state.history.push({ you: youMove, opp: oppMove, gy, go });
+  state.lastReveal = { you: youMove, opp: oppMove, gy, go };
+  state.phase = "reveal";
+  renderPlay();
+}
+
+function onYouChoose(move) {
+  if (state.opp === "human") {
+    state.pendingYou = move;     // A の選択
+    state.phase = "passToB";
+    renderPlay();
+  } else {
+    const oppMove = botMove();   // A の手を見ずに（履歴ベースで）決定
+    resolveRound(move, oppMove);
+  }
+}
+
+function onBChoose(move) {
+  resolveRound(state.pendingYou, move);
+  state.pendingYou = null;
+}
+
+function nextRound() {
+  if (state.round >= state.totalRounds) { endGame(); return; }
+  state.round++;
+  state.phase = "choose";
+  state.lastReveal = null;
+  renderPlay();
+}
+
+/* ============================================================
+   Render PLAY
+============================================================ */
+function renderPlay() {
+  $("scoreYou").textContent = state.scoreYou;
+  $("scoreOpp").textContent = state.scoreOpp;
+  $("oppLabel").textContent = oppDisplayLabel(false);
+  $("roundStatus").innerHTML = `<strong>${t("round_of")(state.round, state.totalRounds)}</strong>`;
+
+  const body = $("playBody");
+  const C = t("cooperate"), D = t("betray");
+  const coopBtn = (cb) => `<button class="choice-btn coop" type="button" data-m="C">${C}<span class="sub">${t("coop_sub")}</span></button>`;
+  const betrayBtn = () => `<button class="choice-btn betray" type="button" data-m="D">${D}<span class="sub">${t("betray_sub")}</span></button>`;
+
+  if (state.phase === "choose") {
+    const label = (state.opp === "human") ? t("a_turn") : t("your_turn");
+    body.innerHTML = `
+      <p style="text-align:center;color:var(--text-muted);font-size:.9rem;margin:0 0 12px;">${label}</p>
+      <div class="choice-row">${coopBtn()}${betrayBtn()}</div>`;
+    body.querySelectorAll(".choice-btn").forEach(b =>
+      b.addEventListener("click", () => onYouChoose(b.dataset.m)));
+
+  } else if (state.phase === "passToB") {
+    body.innerHTML = `
+      <div class="pass-screen">
+        <div class="big">${t("pass_to_b")}</div>
+        <div class="small">${t("pass_small")}</div>
+        <button class="next-btn" type="button" id="readyBtn">${t("ready")}</button>
+      </div>`;
+    $("readyBtn").addEventListener("click", () => { state.phase = "bturn"; renderPlay(); });
+
+  } else if (state.phase === "bturn") {
+    body.innerHTML = `
+      <p style="text-align:center;color:var(--text-muted);font-size:.9rem;margin:0 0 4px;">${t("b_turn")}</p>
+      <p style="text-align:center;color:var(--text-muted);font-size:.78rem;margin:0 0 12px;">${t("b_hidden")}</p>
+      <div class="choice-row">${coopBtn()}${betrayBtn()}</div>`;
+    body.querySelectorAll(".choice-btn").forEach(b =>
+      b.addEventListener("click", () => onBChoose(b.dataset.m)));
+
+  } else if (state.phase === "reveal") {
+    const r = state.lastReveal;
+    const youName = (state.opp === "human") ? "A" : t("you");
+    const oppName_ = oppDisplayLabel(false);
+    const moveTxt = (m) => m === "C" ? t("cooperate") : t("betray");
+    const cls = (m) => m === "C" ? "coop" : "betray";
+    const last = state.round >= state.totalRounds;
+    body.innerHTML = `
+      <div class="reveal">
+        <h3 style="text-align:center;color:var(--text-muted);margin:0 0 10px;">${t("this_round")}</h3>
+        <div class="reveal-pair">
+          <div class="reveal-box ${cls(r.you)}">
+            <div class="who">${youName}</div>
+            <div class="move">${moveTxt(r.you)}</div>
+            <div class="gain">${t("gained")(r.gy)}</div>
+          </div>
+          <div class="reveal-box ${cls(r.opp)}">
+            <div class="who">${oppName_}</div>
+            <div class="move">${moveTxt(r.opp)}</div>
+            <div class="gain">${t("gained")(r.go)}</div>
+          </div>
+        </div>
+        <button class="next-btn" type="button" id="nextBtn">${last ? t("see_final") : t("next")}</button>
+      </div>`;
+    $("nextBtn").addEventListener("click", nextRound);
+  }
+
+  renderHist("histTable");
+  drawChart("chart");
+}
+
+/* ============================================================
+   History table
+============================================================ */
+function renderHist(id) {
+  const tbl = $(id);
+  let rows = `<tr>
+    <th>${t("t_round")}</th><th>${t("t_you")}</th><th>${t("t_opp")}</th>
+    <th>${t("t_pty")}</th><th>${t("t_pto")}</th></tr>`;
+  const mv = (m) => m === "C" ? t("cooperate") : t("betray");
+  state.history.forEach((r, i) => {
+    rows += `<tr>
+      <td>${i + 1}</td>
+      <td class="${r.you === 'C' ? 'c' : 'd'}">${mv(r.you)}</td>
+      <td class="${r.opp === 'C' ? 'c' : 'd'}">${mv(r.opp)}</td>
+      <td class="pt-you">${r.gy}</td>
+      <td class="pt-opp">${r.go}</td></tr>`;
+  });
+  if (state.history.length) {
+    rows += `<tr class="total">
+      <td>${t("t_total")}</td><td></td><td></td>
+      <td class="pt-you">${state.scoreYou}</td>
+      <td class="pt-opp">${state.scoreOpp}</td></tr>`;
+  }
+  tbl.innerHTML = rows;
+}
+
+/* ============================================================
+   Chart (vanilla canvas, cumulative)
+============================================================ */
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function drawChart(id) {
+  const canvas = $(id);
+  if (!canvas) return;
+  const cssW = canvas.clientWidth || 880;
+  const ratio = window.devicePixelRatio || 1;
+  const W = cssW, H = 300;
+  canvas.width = W * ratio;
+  canvas.height = H * ratio;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const pad = { l: 38, r: 14, t: 16, b: 26 };
+  const plotW = W - pad.l - pad.r;
+  const plotH = H - pad.t - pad.b;
+
+  const grid = cssVar("--border");
+  const muted = cssVar("--text-muted");
+  const youC = cssVar("--you");
+  const oppC = cssVar("--opp");
+
+  // cumulative arrays incl. round 0 = 0
+  const cumY = [0], cumO = [0];
+  state.history.forEach(r => {
+    cumY.push(cumY[cumY.length - 1] + r.gy);
+    cumO.push(cumO[cumO.length - 1] + r.go);
+  });
+
+  const xMax = state.totalRounds;
+  const maxScore = Math.max(10, PAY.DC * state.totalRounds * 0.6,
+                            cumY[cumY.length - 1], cumO[cumO.length - 1]);
+  const yMax = Math.ceil(maxScore / 5) * 5;
+
+  const X = (i) => pad.l + (xMax === 0 ? 0 : (i / xMax) * plotW);
+  const Y = (v) => pad.t + plotH - (v / yMax) * plotH;
+
+  ctx.font = "11px sans-serif";
+  ctx.textBaseline = "middle";
+
+  // y grid
+  ctx.strokeStyle = grid; ctx.fillStyle = muted; ctx.lineWidth = 1;
+  const ySteps = 4;
+  for (let s = 0; s <= ySteps; s++) {
+    const v = (yMax / ySteps) * s;
+    const y = Y(v);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    ctx.textAlign = "right";
+    ctx.fillText(String(Math.round(v)), pad.l - 6, y);
+  }
+  // x labels (every round, but thin out if many)
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  const step = xMax > 12 ? Math.ceil(xMax / 10) : 1;
+  for (let i = 0; i <= xMax; i += step) {
+    ctx.fillText(String(i), X(i), H - pad.b + 6);
+  }
+
+  // line drawer
+  function line(arr, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = 2.4;
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.beginPath();
+    arr.forEach((v, i) => { i === 0 ? ctx.moveTo(X(i), Y(v)) : ctx.lineTo(X(i), Y(v)); });
+    ctx.stroke();
+    ctx.fillStyle = color;
+    arr.forEach((v, i) => { ctx.beginPath(); ctx.arc(X(i), Y(v), 3, 0, Math.PI * 2); ctx.fill(); });
+  }
+  line(cumO, oppC);
+  line(cumY, youC);
+}
+
+/* ============================================================
+   End screen
+============================================================ */
+function endGame() {
+  playScreen.classList.add("hidden");
+  endScreen.classList.remove("hidden");
+  window.scrollTo(0, 0);
+  renderEnd();
+}
+
+function renderEnd() {
+  const v = $("verdict");
+  if (state.scoreYou > state.scoreOpp) v.textContent = t("you_win");
+  else if (state.scoreYou < state.scoreOpp) v.textContent = t("opp_win");
+  else v.textContent = t("draw");
+
+  const oppLbl = oppDisplayLabel(true);
+  $("finalScore").innerHTML =
+    `${t("final_lead")}<span class="you-pt">${t("you")} ${state.scoreYou}</span>` +
+    ` ${t("vs")} ` +
+    `<span class="opp-pt">${oppLbl} ${state.scoreOpp}</span>`;
+
+  // 相手戦略の解説
+  const or = $("oppReveal");
+  if (state.opp === "human") {
+    or.textContent = "";
+  } else if (state.opp === "mystery") {
+    or.textContent = t("mystery_was")(oppName(state.actualStrategy), oppDesc(state.actualStrategy));
+  } else {
+    or.textContent = t("opp_was")(oppName(state.opp), oppDesc(state.opp));
+  }
+
+  $("legendOppEnd").textContent = oppLbl;
+
+  // reflection
+  const ul = $("reflectList");
+  ul.innerHTML = "";
+  t("reflect").forEach(q => {
+    const li = document.createElement("li");
+    li.textContent = q;
+    ul.appendChild(li);
+  });
+
+  renderHist("histTableEnd");
+  drawChart("chartEnd");
+}
+
+/* ============================================================
+   Wiring
+============================================================ */
+$("langBtn").addEventListener("click", () => setLang(lang === "ja" ? "en" : "ja"));
+$("themeBtn").addEventListener("click", () => setTheme(theme === "dark" ? "light" : "dark"));
+$("startBtn").addEventListener("click", startGame);
+$("againBtn").addEventListener("click", startGame);
+$("backBtn").addEventListener("click", () => {
+  endScreen.classList.add("hidden");
+  playScreen.classList.add("hidden");
+  setupScreen.classList.remove("hidden");
+  window.scrollTo(0, 0);
+});
+window.addEventListener("resize", () => {
+  if (!playScreen.classList.contains("hidden")) drawChart("chart");
+  if (!endScreen.classList.contains("hidden")) drawChart("chartEnd");
+});
+
+/* init */
+// OS のダークモード設定を初期反映
+if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) theme = "dark";
+document.documentElement.setAttribute("data-theme", theme);
+$("themeBtn").textContent = theme === "dark" ? "☀️" : "🌙";
+
+applyStaticI18n();
+buildOpponents();
+buildRounds();
+buildPayoff();
+$("oppLabel").textContent = oppDisplayLabel(false);
+$("legendOpp").textContent = oppDisplayLabel(false);
+</script>
+</body>
+</html>
